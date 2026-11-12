@@ -1,0 +1,15 @@
+{
+  "name": "coldroute",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ColdRoute — multi-party cold-chain evidence and excursion review platform",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "contracts"
+  ],
+  "scripts": {
+    "docs": "echo \"See docs/\""
+  },
+  "license": "UNLICENSED"
+}

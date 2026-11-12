@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-white: #FFFFFF;
+    --color-ice: #F2F7FA;
+    --color-midnight: #17334C;
+    --color-deepblue: #255C81;
+    --color-iceblue: #DDECF5;
+    --color-teal: #3B8F91;
+    --color-amber: #E3A13C;
+    --color-coral: #C95650;
+    --color-slate: #687A88;
+    --color-border: #DDE6EC;
+
+    --font-inter: Inter, system-ui, sans-serif;
+    --font-plex-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+    --radius: 6px;
+  }
+
+  body {
+    background-color: var(--color-ice);
+    color: var(--color-midnight);
+    font-family: var(--font-inter);
+    margin: 0;
+  }
+
+  .font-mono {
+    font-family: var(--font-plex-mono);
+  }
+
+  .text-midnight { color: var(--color-midnight); }
+  .text-deepblue { color: var(--color-deepblue); }
+  .text-teal { color: var(--color-teal); }
+  .text-amber { color: var(--color-amber); }
+  .text-coral { color: var(--color-coral); }
+  .text-slate { color: var(--color-slate); }
+  .bg-ice { background-color: var(--color-ice); }
+  .bg-midnight { background-color: var(--color-midnight); }
+  .bg-deepblue { background-color: var(--color-deepblue); }
+  .bg-iceblue { background-color: var(--color-iceblue); }
+  .bg-teal { background-color: var(--color-teal); }
+  .bg-amber { background-color: var(--color-amber); }
+  .bg-coral { background-color: var(--color-coral); }
+  .bg-white { background-color: var(--color-white); }
+  .border-coldroute { border-color: var(--color-border); }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}

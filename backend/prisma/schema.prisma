@@ -1,0 +1,458 @@
+// ColdRoute Prisma Schema
+// Multi-party cold-chain evidence and excursion review platform
+// Data models per product specification section 12
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  SENSOR_ISSUER
+  QUALITY_REVIEWER
+  PARTICIPANT
+  VIEWER
+}
+
+enum ShipmentStatus {
+  DRAFT
+  REGISTERED
+  DISPATCHED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  EXCEPTION
+  CLOSED
+}
+
+enum SensorConnectionState {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  UNKNOWN
+}
+
+enum MeasurementUnit {
+  CELSIUS
+  FAHRENHEIT
+}
+
+enum ExcursionType {
+  UPPER_THRESHOLD
+  LOWER_THRESHOLD
+  MISSING_DATA
+}
+
+enum CaseStatus {
+  PENDING
+  ACKNOWLEDGED
+  CHALLENGED
+  SUPERSEDED
+  DISPOSITION_RECORDED
+  CLOSED
+}
+
+enum DispositionType {
+  ACCEPTED
+  REJECTED
+  QUARANTINED
+  REQUIRES_REVIEW
+}
+
+enum AcknowledgementType {
+  HANDOFF
+  EVENT_RECEIPT
+  EVIDENCE_RECEIPT
+  CHALLENGE
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+  WEBHOOK
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  READ
+  EXPORT
+  ACKNOWLEDGE
+  CHALLENGE
+  SUPERSEDE
+  DISPOSITION
+  CLOSE
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          UserRole  @default(VIEWER)
+  organisationId String   @db.Uuid
+  organisation  Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  shipmentsCreated Shipment[] @relation("ShipmentCreator")
+  acknowledgements Acknowledgement[] @relation("AcknowledgementAuthor")
+  qualityReviews QualityReview[] @relation("QualityReviewer")
+  auditLogs AuditLog[] @relation("AuditLogActor")
+
+  @@index([organisationId])
+  @@index([email])
+}
+
+model Organisation {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  type      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  shipments     Shipment[]
+  participants  ShipmentParticipant[]
+  sensors       Sensor[]
+  qualityReviews QualityReview[]
+  auditLogs     AuditLog[]
+
+  @@index([slug])
+}
+model Shipment {
+  id                String   @id @default(uuid()) @db.Uuid
+  reference         String   @unique
+  organisationId    String   @db.Uuid
+  organisation      Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  createdById       String   @db.Uuid
+  createdBy         User     @relation("ShipmentCreator", fields: [createdById], references: [id])
+  productCategory   String
+  origin            String
+  destination       String
+  expectedDelivery  DateTime
+  carrierId         String?  @db.Uuid
+  carrier           Organisation? @relation("ShipmentCarrier", fields: [carrierId], references: [id])
+  receivingOrgId    String?  @db.Uuid
+  receivingOrganisation Organisation? @relation("ShipmentReceiver", fields: [receivingOrgId], references: [id])
+  sensorProviderId  String?  @db.Uuid
+  sensorProvider    Organisation? @relation("ShipmentSensorProvider", fields: [sensorProviderId], references: [id])
+  status            ShipmentStatus @default(DRAFT)
+  chainId           Int      @default(968)
+  caseId            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  participants   ShipmentParticipant[]
+  products       ShipmentProduct[]
+  policy         TemperaturePolicy?
+  sensors        Sensor[]
+  observations   SensorObservation[]
+  excursions     Excursion[]
+  evidence       EvidenceDocument[]
+  acknowledgements Acknowledgement[]
+  qualityReviews QualityReview[]
+  auditLogs      AuditLog[]
+  transactions   Transaction[]
+
+  @@index([organisationId])
+  @@index([reference])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ShipmentParticipant {
+  id             String   @id @default(uuid()) @db.Uuid
+  shipmentId     String   @db.Uuid
+  shipment       Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  organisationId String   @db.Uuid
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  role           String
+  invitedAt      DateTime @default(now())
+  invitedById    String   @db.Uuid
+  invitedBy      User     @relation(fields: [invitedById], references: [id])
+  acknowledgedAt DateTime?
+  onChainAck     Boolean  @default(false)
+
+  @@index([shipmentId])
+  @@index([organisationId])
+  @@unique([shipmentId, organisationId])
+}
+
+model ShipmentProduct {
+  id           String   @id @default(uuid()) @db.Uuid
+  shipmentId   String   @db.Uuid
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  productName  String
+  sku          String?
+  batchNumber  String?
+  quantity     String?
+  temperatureMin String?
+  temperatureMax String?
+  unit         MeasurementUnit @default(CELSIUS)
+
+  @@index([shipmentId])
+}
+
+model TemperaturePolicy {
+  id             String   @id @default(uuid()) @db.Uuid
+  shipmentId     String   @db.Uuid @unique
+  shipment       Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  minTemperature Float
+  maxTemperature Float
+  unit           MeasurementUnit @default(CELSIUS)
+  maxGapMinutes  Int      @default(60)
+  policyHash     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([shipmentId])
+}
+
+model Sensor {
+  id                 String   @id @default(uuid()) @db.Uuid
+  serialReference    String   @unique
+  model              String
+  providerId         String   @db.Uuid
+  provider           Organisation @relation(fields: [providerId], references: [id])
+  measurementType    String
+  unit               MeasurementUnit @default(CELSIUS)
+  calibrationCertRef String?
+  connectionMethod   String
+  connectionState    SensorConnectionState @default(UNKNOWN)
+  lastObservedAt     DateTime?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  observations  SensorObservation[]
+  connections   SensorConnection[]
+
+  @@index([serialReference])
+  @@index([providerId])
+  @@index([connectionState])
+}
+
+model SensorCalibrationReference {
+  id             String   @id @default(uuid()) @db.Uuid
+  sensorId       String   @db.Uuid
+  sensor         Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  certificateRef String
+  issuedAt       DateTime
+  expiresAt      DateTime?
+  issuer         String
+  documentUrl    String?
+
+  @@index([sensorId])
+}
+
+model SensorConnection {
+  id                    String   @id @default(uuid()) @db.Uuid
+  sensorId              String   @db.Uuid
+  sensor                Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  provider              String
+  authType              String?
+  endpointUrl           String?
+  credentialsEncrypted  String?
+  webhookSecret         String?
+  isActive              Boolean  @default(true)
+  lastSyncAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([sensorId])
+}
+
+model SensorObservation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  shipmentId         String?  @db.Uuid
+  shipment           Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  sensorId           String   @db.Uuid
+  sensor             Sensor   @relation(fields: [sensorId], references: [id])
+  value              Float
+  unit               MeasurementUnit
+  measurementTimestamp DateTime
+  ingestionTimestamp DateTime @default(now())
+  source             String
+  rawPayload         Json?
+  correctionOfId     String?  @db.Uuid
+  correctionOf       SensorObservation? @relation("ObservationCorrection", fields: [correctionOfId], references: [id])
+  isCorrected        Boolean  @default(false)
+
+  @@index([sensorId])
+  @@index([measurementTimestamp])
+  @@index([ingestionTimestamp])
+  @@index([shipmentId, measurementTimestamp])
+}
+
+model Excursion {
+  id            String   @id @default(uuid()) @db.Uuid
+  shipmentId    String   @db.Uuid
+  shipment      Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  excursionType ExcursionType
+  minThreshold  Float?
+  maxThreshold  Float?
+  unit          MeasurementUnit
+  startedAt     DateTime
+  endedAt       DateTime?
+  durationMinutes Int?
+  status        String   @default("open")
+  onChainExcursionId String?
+  recordedAt    DateTime @default(now())
+  reporterId    String?  @db.Uuid
+  reporter      User?    @relation(fields: [reporterId], references: [id])
+
+  observations SensorObservation[]
+
+  @@index([shipmentId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model EvidenceDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  shipmentId   String   @db.Uuid
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  fileName     String
+  filePath     String
+  fileSize     Int?
+  mimeType     String?
+  contentHash  String?
+  uploadedById String   @db.Uuid
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  isOnChain    Boolean  @default(false)
+  onChainRef   String?
+  uploadedAt   DateTime @default(now())
+
+  downloadLogs AuditLog[] @relation("EvidenceDownload")
+
+  @@index([shipmentId])
+  @@index([uploadedAt])
+}
+
+model Acknowledgement {
+  id             String   @id @default(uuid()) @db.Uuid
+  shipmentId     String   @db.Uuid
+  shipment       Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  type           AcknowledgementType
+  organisationId String   @db.Uuid
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  authorId       String   @db.Uuid
+  author         User     @relation("AcknowledgementAuthor", fields: [authorId], references: [id])
+  comment        String?
+  evidenceDocumentId String? @db.Uuid
+  evidenceDocument EvidenceDocument? @relation(fields: [evidenceDocumentId], references: [id])
+  onChainAck     Boolean  @default(false)
+  onChainRef     String?
+  acknowledgedAt DateTime @default(now())
+
+  @@index([shipmentId])
+  @@index([organisationId])
+  @@index([acknowledgedAt])
+}
+
+model QualityReview {
+  id           String   @id @default(uuid()) @db.Uuid
+  shipmentId   String   @db.Uuid
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  reviewerId   String   @db.Uuid
+  reviewer     User     @relation("QualityReviewer", fields: [reviewerId], references: [id])
+  status       String   @default("open")
+  notes        String?
+  requestedEvidence String?
+  completedAt  DateTime?
+
+  dispositions Disposition[]
+
+  @@index([shipmentId])
+  @@index([reviewerId])
+  @@index([status])
+}
+
+model Disposition {
+  id             String   @id @default(uuid()) @db.Uuid
+  qualityReviewId String  @db.Uuid
+  qualityReview  QualityReview @relation(fields: [qualityReviewId], references: [id], onDelete: Cascade)
+  type           DispositionType
+  dispositionDigest String?
+  onChainRef     String?
+  reviewerId     String   @db.Uuid
+  reviewer       User     @relation(fields: [reviewerId], references: [id])
+  recordedAt     DateTime @default(now())
+
+  @@index([qualityReviewId])
+  @@index([reviewerId])
+  @@index([recordedAt])
+}
+
+model Notification {
+  id          String   @id @default(uuid()) @db.Uuid
+  shipmentId  String?  @db.Uuid
+  shipment    Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  recipientId String   @db.Uuid
+  recipient   User     @relation(fields: [recipientId], references: [id])
+  type        String
+  channel     NotificationChannel @default(IN_APP)
+  title       String
+  body        String
+  read        Boolean  @default(false)
+  sentAt      DateTime @default(now())
+
+  @@index([recipientId])
+  @@index([shipmentId])
+  @@index([sentAt])
+}
+
+model Transaction {
+  id           String   @id @default(uuid()) @db.Uuid
+  shipmentId   String?  @db.Uuid
+  shipment     Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  chainId      Int
+  txHash       String   @unique
+  from         String
+  to           String
+  functionName String
+  status       String
+  blockNumber  BigInt?
+  gasUsed      BigInt?
+  receiptVerified Boolean @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([shipmentId])
+  @@index([txHash])
+  @@index([status])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  shipmentId   String?  @db.Uuid
+  shipment     Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  userId       String?  @db.Uuid
+  user         User?    @relation("AuditLogActor", fields: [userId], references: [id])
+  action       AuditAction
+  entityType   String
+  entityId     String?
+  metadata     Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@index([shipmentId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
