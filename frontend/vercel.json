@@ -1,13 +1,5 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "images": {
-    "domains": ["localhost"]
-  },
-  "env": {
-    "NEXT_PUBLIC_API_URL": process.env.NEXT_PUBLIC_API_URL,
-    "NEXT_PUBLIC_BOT_TESTNET_RPC": process.env.NEXT_PUBLIC_BOT_TESTNET_RPC,
-    "NEXT_PUBLIC_BOT_MAINNET_RPC": process.env.NEXT_PUBLIC_BOT_MAINNET_RPC
-  }
+  "outputDirectory": ".next"
 }
